@@ -133,7 +133,32 @@ internal sealed partial class WalletEditor
         if (snapshot.Count != count)
             edits.Add(new SaveEdit(snapshot.Content, WalletPayload(snapshot, count)));
 
-        return CommitSaveEdits(edits, snapshot.Count == count ? snapshot.Content : null);
+        return CommitSaveEdits(edits, snapshot.Count == count ? snapshot.Content : null,
+            ReadLegacyWalletBackups(snapshot));
+    }
+
+    private IList<SaveArchive> ReadLegacyWalletBackups(WalletSnapshot wallet)
+    {
+        var archives = new List<SaveArchive>();
+        string folder = Path.GetDirectoryName(wallet.Path);
+        string prefix = Path.GetFileName(wallet.Path) + ".grey-blocks.";
+        foreach (string path in Directory.EnumerateFiles(folder).OrderBy(path => path, StringComparer.Ordinal))
+        {
+            string name = Path.GetFileName(path);
+            if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                !name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+                continue;
+            try
+            {
+                WalletSnapshot backup = Read(path);
+                if (string.Equals(backup.Content.SlotId, wallet.Content.SlotId, StringComparison.Ordinal))
+                    archives.Add(new SaveArchive(backup.Content));
+            }
+            catch (FileNotFoundException) { }
+            catch (InvalidDataException) { }
+            catch (CryptographicException) { }
+        }
+        return archives;
     }
 
     private WalletSnapshot ReadWalletRecovery(WalletSnapshot wallet)
@@ -283,13 +308,33 @@ internal sealed partial class WalletEditor
         }
     }
 
-    private static string CommitSaveEdits(IList<SaveEdit> edits, SaveContent unchangedSave)
+    private sealed class SaveArchive
     {
-        if (edits.Count == 0)
+        internal readonly SaveContent Save;
+        internal readonly string Destination;
+
+        internal SaveArchive(SaveContent save)
+        {
+            Save = save;
+            // The game loads .bak files too, ordered by filename. Keep legacy backups
+            // byte-for-byte under an extension that its persistence cache ignores.
+            Destination = save.Path + ".mcneff-backup";
+            if (File.Exists(Destination))
+                Destination += "-" + Guid.NewGuid().ToString("N");
+        }
+    }
+
+    private static string CommitSaveEdits(IList<SaveEdit> edits, SaveContent unchangedSave,
+        IList<SaveArchive> archives = null)
+    {
+        if (archives == null)
+            archives = new SaveArchive[0];
+        if (edits.Count == 0 && archives.Count == 0)
             return null;
 
         var staged = new List<SaveEdit>(edits.Count);
         var applied = new List<SaveEdit>(edits.Count);
+        var archived = new List<SaveArchive>(archives.Count);
         try
         {
             // Stage all replacements before updating the saves.
@@ -308,6 +353,8 @@ internal sealed partial class WalletEditor
                 VerifyUnchanged(unchangedSave);
             foreach (SaveEdit edit in edits)
                 VerifyUnchanged(edit.Save);
+            foreach (SaveArchive archive in archives)
+                VerifyUnchanged(archive.Save);
 
             foreach (SaveEdit edit in edits)
             {
@@ -318,11 +365,36 @@ internal sealed partial class WalletEditor
                     throw new IOException("The save changed after writing. Refresh to check it.");
             }
 
-            return edits[edits.Count - 1].Backup;
+            foreach (SaveArchive archive in archives)
+            {
+                RequireGameClosed();
+                VerifyUnchanged(archive.Save);
+                File.Move(archive.Save.Path, archive.Destination);
+                archived.Add(archive);
+                if (!File.ReadAllBytes(archive.Destination).SequenceEqual(archive.Save.Original))
+                    throw new IOException("An old wallet backup changed while it was being archived.");
+            }
+
+            return edits.Count == 0 ? archives[archives.Count - 1].Destination : edits[edits.Count - 1].Backup;
         }
         catch (Exception writeError)
         {
             var failures = new List<Exception> { writeError };
+            for (int index = archived.Count - 1; index >= 0; index--)
+            {
+                SaveArchive archive = archived[index];
+                try
+                {
+                    RequireGameClosed();
+                    if (!File.ReadAllBytes(archive.Destination).SequenceEqual(archive.Save.Original))
+                        throw new IOException("An archived wallet backup changed during the edit.");
+                    File.Move(archive.Destination, archive.Save.Path);
+                }
+                catch (Exception rollbackError)
+                {
+                    failures.Add(rollbackError);
+                }
+            }
             for (int index = applied.Count - 1; index >= 0; index--)
             {
                 SaveEdit edit = applied[index];

@@ -14,12 +14,16 @@ internal sealed class SaveSlot
     public int Number { get; private set; }
     public string Path { get; private set; }
     public bool Exists { get; private set; }
+    public DateTime LastPlayedUtc { get; private set; }
+    public bool IsMostRecent { get; private set; }
 
-    internal SaveSlot(int number, string path, bool exists)
+    internal SaveSlot(int number, string path, bool exists, ulong lastPlayedTicks, bool isMostRecent)
     {
         Number = number;
         Path = path;
         Exists = exists;
+        LastPlayedUtc = new DateTime((long)lastPlayedTicks, DateTimeKind.Utc);
+        IsMostRecent = isMostRecent;
     }
 
     public override string ToString()
@@ -27,7 +31,9 @@ internal sealed class SaveSlot
         var label = "Save " + Number.ToString(CultureInfo.InvariantCulture);
         if (!Exists)
             return label + " (empty)";
-        return Path == null ? label + " (wallet unavailable)" : label;
+        if (Path == null)
+            return label + " (wallet unavailable)";
+        return IsMostRecent ? label + " (latest)" : label;
     }
 }
 
@@ -38,6 +44,7 @@ internal sealed partial class WalletEditor
         internal string Id;
         internal string WalletPath;
         internal ulong CreatedTicks;
+        internal ulong LastPlayedTicks;
     }
 
     public SaveSlot[] FindSaveSlots()
@@ -57,24 +64,30 @@ internal sealed partial class WalletEditor
                 if (!Guid.TryParseExact(id, "N", out ignored) || !HasSaveFile(folder))
                     continue;
                 var wallet = Path.Combine(folder, "wallet", "wallet.data");
-                existing.Add(new SessionFile
+                var file = new SessionFile
                 {
                     Id = id,
-                    CreatedTicks = ReadSessionCreation(folder, id),
                     WalletPath = File.Exists(wallet) ? wallet : null
-                });
+                };
+                ReadSessionTimes(folder, id, out file.CreatedTicks, out file.LastPlayedTicks);
+                existing.Add(file);
             }
         }
 
         // File numbers use creation order. The game's display order is separate.
+        SessionFile latest = existing.Where(file => file.WalletPath != null && file.LastPlayedTicks != 0)
+            .OrderByDescending(file => file.LastPlayedTicks)
+            .ThenBy(file => file.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
         var slots = existing.OrderBy(file => file.CreatedTicks == 0)
             .ThenBy(file => file.CreatedTicks)
             .ThenBy(file => file.Id, StringComparer.Ordinal)
-            .Select((file, index) => new SaveSlot(index + 1, file.WalletPath, true))
+            .Select((file, index) => new SaveSlot(index + 1, file.WalletPath, true,
+                file.LastPlayedTicks, file == latest))
             .ToList();
         var slotCount = Math.Max(3, slots.Count + 1);
         while (slots.Count < slotCount)
-            slots.Add(new SaveSlot(slots.Count + 1, null, false));
+            slots.Add(new SaveSlot(slots.Count + 1, null, false, 0, false));
         return slots.ToArray();
     }
 
@@ -162,8 +175,10 @@ internal sealed partial class WalletEditor
         return null;
     }
 
-    private ulong ReadSessionCreation(string folder, string id)
+    private void ReadSessionTimes(string folder, string id, out ulong createdTicks, out ulong lastPlayedTicks)
     {
+        createdTicks = 0;
+        lastPlayedTicks = 0;
         var path = Path.Combine(folder, "manifest", "manifest.data");
         foreach (var candidate in new[] { path, path + ".bak" })
         {
@@ -183,9 +198,14 @@ internal sealed partial class WalletEditor
                     continue;
                 ReadManifestString(payload, ref position); // Display name.
                 var fields = new BrickPack(Slice(payload, position, payload.Length - position));
-                var ticks = fields.ReadUInt64();
-                if (ticks <= (ulong)DateTime.MaxValue.Ticks)
-                    return ticks;
+                var created = fields.ReadUInt64();
+                var lastPlayed = fields.ReadUInt64();
+                if (created <= (ulong)DateTime.MaxValue.Ticks && lastPlayed <= (ulong)DateTime.MaxValue.Ticks)
+                {
+                    createdTicks = created;
+                    lastPlayedTicks = lastPlayed;
+                    return;
+                }
             }
             catch (InvalidDataException) { }
             catch (IOException) { }
@@ -194,7 +214,6 @@ internal sealed partial class WalletEditor
             catch (OverflowException) { }
         }
         // The game assigns a ticket even when it cannot read the manifest.
-        return 0;
     }
 
     private static string ReadManifestString(byte[] payload, ref int position)

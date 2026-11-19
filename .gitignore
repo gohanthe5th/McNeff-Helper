@@ -2,6 +2,7 @@
 /tests/q-*/
 /tests/p-*/
 *.bak
+*.mcneff-backup*
 edit-*.tmp
 *.user
 *.suo

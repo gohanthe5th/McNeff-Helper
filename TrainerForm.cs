@@ -341,6 +341,8 @@ internal sealed partial class TrainerForm : Form
             if (index < 0 && previous != null)
                 index = Array.FindIndex(slots, slot => slot.Number == previous.Number);
             if (index < 0)
+                index = Array.FindIndex(slots, slot => slot.IsMostRecent);
+            if (index < 0)
                 index = Array.FindIndex(slots, slot => slot.Path != null);
 
             savePicker.BeginUpdate();

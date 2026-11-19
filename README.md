@@ -8,13 +8,15 @@ Requires 64-bit Windows, .NET Framework 4.8, and the supported Steam game versio
 
 ## Using the app
 
-Download the EXE and open it. Choose Save 1, 2, or 3 in the save picker.
+Download the EXE and open it. The most recently played save is selected automatically and marked **(latest)**. Confirm Save 1, 2, or 3 in the picker matches the save you intend to load.
 
 Close the game before editing bricks, unlocking recipes, or adding builds. Save edits create backups automatically. Start the game to use the live switches, and keep McNeff Helper open while those switches are on.
 
 ### Bricks
 
 Set Grey Blocks to a chosen count, up to 9,999,999. Set an individual colored brick or all 100 color and shape variants, up to 999 each.
+
+If an older version created `wallet.data.grey-blocks.*.bak` backups, **Set Grey** preserves those files with a `.mcneff-backup` extension. This prevents the game from loading an old backup ahead of the edited wallet. Existing users should close the game, choose their save, and set the gray block count once with this version before loading again.
 
 ### Project Manager
 
@@ -60,6 +62,14 @@ With the supported game installed, the save-editor checks can be run from the re
 ```
 
 `tests\Test-Trainer.ps1` uses `tests\NativeImageFixture.cs` compiled as a separate `WeStealFromOldPeople.exe` fixture. Close the real game before running that fixture. The script checks patch restoration, switch combinations, Apply, and the cap override.
+
+The gray block regression uses the game's native file comparator to reproduce old backups overriding the primary wallet. It checks the repaired selection, byte-for-byte backup preservation, repeated edits, and rollback after a locked file prevents archiving.
+
+```powershell
+$compiler = Join-Path $env:windir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+& $compiler /nologo /langversion:5 /target:exe /platform:x64 /optimize+ /warnaserror+ /out:bin\NativeWalletChoiceFixture.exe tests\NativeWalletChoiceFixture.cs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\Test-GreyWalletLoad.ps1 -Executable 'bin\McNeff Helper.exe' -Fixture '.\bin\NativeWalletChoiceFixture.exe'
+```
 
 The downloadable EXE's SHA-256 checksum is in [download/SHA256SUMS.txt](download/SHA256SUMS.txt).
 

@@ -125,6 +125,9 @@ function Test-AdditionalSlots($Editor) {
         $refreshedPicker.Items[1].Path -ne $secondWallet -or $refreshedPicker.Items[2].Path -ne $thirdWallet) {
         throw 'Reload did not discover Save 2 and Save 3 on the open trainer.'
     }
+    if ($refreshedPicker.SelectedItem.Path -ne $wallet) {
+        throw 'Refresh replaced the existing Save 1 selection with the most recently played save.'
+    }
 
     $additionalForm = [Activator]::CreateInstance($type)
     $additionalEvents = @($additionalForm, [EventArgs]::Empty)
@@ -141,6 +144,18 @@ function Test-AdditionalSlots($Editor) {
             if ($item.Number -ne ($index + 1) -or !$item.Exists -or $item.Path -ne $expected[$index]) {
                 throw "Save $($index + 1) did not use its manifest creation order. $($currentStatus.Text)"
             }
+        }
+        if ($picker.SelectedItem.Path -ne $secondWallet -or !$picker.Items[1].IsMostRecent -or
+            $picker.Items[1].LastPlayedUtc.Ticks -ne $created.AddHours(4).Ticks -or
+            $picker.Items[1].ToString() -notmatch '\(latest\)' -or
+            $picker.Items[0].IsMostRecent -or $picker.Items[2].IsMostRecent) {
+            throw 'A new helper did not select and identify Save 2 from its manifest last-played time.'
+        }
+
+        $picker.SelectedIndex = 0
+        [void]$type.GetMethod('OnRefreshSaves', $flags).Invoke($additionalForm, $additionalEvents)
+        if ($picker.SelectedItem.Path -ne $wallet) {
+            throw 'Refresh replaced an explicit Save 1 selection with the most recently played save.'
         }
 
         $picker.SelectedIndex = 1
@@ -231,7 +246,7 @@ function Test-AdditionalSlots($Editor) {
     } finally {
         $additionalForm.Dispose()
     }
-    'Save 1/2/3 manifest ranks, isolated edits, recipe shortage grants, and stale slot rejection verified.'
+    'Save 1/2/3 ranks, latest-save default, selection preservation, isolated edits, recipe shortage grants, and stale slot rejection verified.'
 }
 
 try {
