@@ -1,0 +1,7 @@
+/bin/
+/tests/q-*/
+/tests/p-*/
+*.bak
+edit-*.tmp
+*.user
+*.suo
