@@ -49,6 +49,8 @@ internal sealed partial class WalletEditor
     public const int MaxGreyBlocks = 9999999;
     private const string SupportedDllHash =
         "43705676D1E9D3CA366CB6DA1340355C605D93BAF908280701173D1546958475";
+    private const string UpdatedDllHash =
+        "396A866DA447BA6BA15D1C8CB6BABAE329F1EEDCD1A8B6AC430A201BE1C684E7";
     private const string DllRelativePath =
         @"steamapps\common\We Steal From Old People The Game\data_WeStealFromOldPeople_windows_x86_64\WeStealFromOldPeople.dll";
     private readonly byte[] secret = new byte[32];
@@ -59,11 +61,13 @@ internal sealed partial class WalletEditor
         using (var hash = SHA256.Create())
         {
             var dllHash = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "");
-            if (dllHash != SupportedDllHash)
+            // Raw file offsets of DefaultGameSecretProvider's verified 32-byte data.
+            if (dllHash == SupportedDllHash)
+                stream.Position = 0x4431bf0;
+            else if (dllHash == UpdatedDllHash)
+                stream.Position = 0x451ea70;
+            else
                 throw new InvalidDataException("This game version has not been verified with the trainer.");
-
-            // This offset is specific to the verified game build.
-            stream.Position = 0x4431bf0;
             if (stream.Read(secret, 0, secret.Length) != secret.Length)
                 throw new InvalidDataException("The game installation is incomplete.");
         }

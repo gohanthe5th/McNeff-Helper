@@ -67,14 +67,15 @@ function Write-PackString([IO.Stream]$Stream, [string]$Value) {
     $Stream.Write($bytes, 0, $bytes.Length)
 }
 
-function Set-FixtureManifest($Editor, [string]$Path, [string]$SessionId, [uint64]$Created, [uint64]$LastPlayed) {
+function Set-FixtureManifest($Editor, [string]$Path, [string]$SessionId, [uint64]$Created, [uint64]$LastPlayed,
+    [int]$FileNumber = -1) {
     $reader = $editorType.GetMethod('ReadSave', [Reflection.BindingFlags]'NonPublic, Instance')
     $writer = $editorType.GetMethod('ReplaceSave', [Reflection.BindingFlags]'NonPublic, Static')
     $numberWriter = $assembly.GetType('BrickPack', $true).GetMethod('WriteUInt', [Reflection.BindingFlags]'NonPublic, Static')
     $save = $reader.Invoke($Editor, [object[]]@($Path, 'manifest'))
     $plain = [IO.MemoryStream]::new()
     try {
-        $plain.WriteByte(0x97)
+        if ($FileNumber -ge 0) { $plain.WriteByte(0x98) } else { $plain.WriteByte(0x97) }
         Write-PackString $plain $SessionId
         Write-PackString $plain 'Fixture'
         [void]$numberWriter.Invoke($null, [object[]]@($plain, $Created))
@@ -83,6 +84,9 @@ function Set-FixtureManifest($Editor, [string]$Path, [string]$SessionId, [uint64
         $plain.Write($playtime, 0, $playtime.Length)
         Write-PackString $plain '0.1.3'
         $plain.WriteByte(0x90)
+        if ($FileNumber -ge 0) {
+            [void]$numberWriter.Invoke($null, [object[]]@($plain, [uint64]$FileNumber))
+        }
         [void]$writer.Invoke($null, [object[]]@($save, $plain.ToArray()))
     } finally {
         $plain.Dispose()
@@ -112,6 +116,55 @@ function Test-AdditionalSlots($Editor) {
     $secondInventory = Join-Path $secondRoot 'block_inventory\block_inventory.data'
     $thirdWallet = Join-Path $thirdRoot 'wallet\wallet.data'
     $thirdInventory = Join-Path $thirdRoot 'block_inventory\block_inventory.data'
+
+    # Native numbering keeps stored numbers, lets the oldest duplicate claim
+    # its number, then fills gaps in creation order. Last-played order is separate.
+    $firstId = [IO.Path]::GetFileName($copyRoot)
+    $firstManifest = Join-Path $copyRoot 'manifest\manifest.data'
+    $secondManifest = Join-Path $secondRoot 'manifest\manifest.data'
+    $thirdManifest = Join-Path $thirdRoot 'manifest\manifest.data'
+    Set-FixtureManifest $Editor $firstManifest $firstId $created.AddHours(-1).Ticks $created.Ticks 3
+    Set-FixtureManifest $Editor $secondManifest $secondId $created.Ticks $created.AddHours(4).Ticks 1
+    Set-FixtureManifest $Editor $thirdManifest $thirdId $created.AddHours(1).Ticks $created.AddHours(6).Ticks 1
+    $numberForm = [Activator]::CreateInstance($type)
+    $numberEvents = @($numberForm, [EventArgs]::Empty)
+    try {
+        [void]$type.GetMethod('OnShown', $flags).Invoke($numberForm, $numberEvents)
+        $numberPicker = $type.GetField('savePicker', $flags).GetValue($numberForm)
+        $numberPaths = @($secondWallet, $thirdWallet, $wallet)
+        foreach ($missingNumber in @($false, $true)) {
+            if ($missingNumber) {
+                Set-FixtureManifest $Editor $thirdManifest $thirdId $created.AddHours(1).Ticks $created.AddHours(6).Ticks 0
+                [void]$type.GetMethod('OnRefreshSaves', $flags).Invoke($numberForm, $numberEvents)
+            }
+            if ($numberPicker.Items.Count -ne 4) { throw 'Expected three numbered saves and one empty slot.' }
+            for ($index = 0; $index -lt 3; $index++) {
+                if ($numberPicker.Items[$index].Number -ne ($index + 1) -or
+                    $numberPicker.Items[$index].Path -ne $numberPaths[$index]) {
+                    throw 'An eight-field manifest lost its stored number or assigned the duplicate/zero number incorrectly.'
+                }
+            }
+            if ($numberPicker.Items[3].Number -ne 4 -or $numberPicker.Items[3].Exists) {
+                throw 'The next empty slot did not use the lowest free file number.'
+            }
+            if (!$missingNumber) {
+                if ($numberPicker.SelectedItem.Path -ne $thirdWallet -or $numberPicker.SelectedItem.Number -ne 2 -or
+                    !$numberPicker.SelectedItem.IsMostRecent) {
+                    throw 'A new helper did not select the latest save independently of its persisted file number.'
+                }
+                $numberPicker.SelectedIndex = 2
+                [void]$type.GetMethod('OnRefreshSaves', $flags).Invoke($numberForm, $numberEvents)
+            }
+            if ($numberPicker.SelectedItem.Path -ne $wallet -or $numberPicker.SelectedItem.Number -ne 3) {
+                throw 'Refresh did not preserve an explicit Save 3 selection while assigning duplicate or missing numbers.'
+            }
+        }
+    } finally { $numberForm.Dispose() }
+
+    # The existing vectors below also verify the seven-field manifest fallback.
+    Set-FixtureManifest $Editor $firstManifest $firstId $created.AddHours(-1).Ticks $created.Ticks
+    Set-FixtureManifest $Editor $secondManifest $secondId $created.Ticks $created.AddHours(4).Ticks
+    Set-FixtureManifest $Editor $thirdManifest $thirdId $created.AddHours(1).Ticks $created.AddHours(2).Ticks
     [IO.File]::SetLastWriteTimeUtc($secondWallet, [DateTime]::UtcNow.AddHours(-3))
     [IO.File]::SetLastWriteTimeUtc($thirdWallet, [DateTime]::UtcNow)
     $beforeFirstWallet = Read-BytesHash $wallet
@@ -246,7 +299,7 @@ function Test-AdditionalSlots($Editor) {
     } finally {
         $additionalForm.Dispose()
     }
-    'Save 1/2/3 ranks, latest-save default, selection preservation, isolated edits, recipe shortage grants, and stale slot rejection verified.'
+    'Legacy and eight-field manifests, stored/duplicate/zero file numbers, latest-save default, selection preservation, isolated edits, recipe shortage grants, and stale slot rejection verified.'
 }
 
 try {

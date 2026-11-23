@@ -5,8 +5,6 @@ using System.Security.Cryptography;
 
 internal sealed partial class WalletEditor
 {
-    private const uint ProgressionSchema = 2;
-
     public HashSet<int> ReadUnlockedRecipeIds(string walletPath)
     {
         return ReadRecipeInstructions(ProgressionPath(walletPath)).Ids;
@@ -63,7 +61,16 @@ internal sealed partial class WalletEditor
 
     private RecipeInstructions ReadRecipeInstructions(string path)
     {
-        SaveContent save = ReadSaveWithSchema(path, "progression", ProgressionSchema);
+        // Both verified progression schemas keep recipe instructions at field 5.
+        // Preserve the original schema and all other payload fields when writing.
+        byte[] header = new byte[12];
+        using (FileStream stream = File.OpenRead(path))
+            if (stream.Read(header, 0, header.Length) != header.Length)
+                throw new InvalidDataException("The progression save header is incomplete.");
+        uint schema = BitConverter.ToUInt32(header, 8);
+        if (schema != 2 && schema != 3)
+            throw new InvalidDataException("The progression save has an unsupported schema.");
+        SaveContent save = ReadSaveWithSchema(path, "progression", schema);
         bool compressed;
         byte[] payload = BrickPack.Unwrap(save.Payload, out compressed);
         RecipeInstructions instructions = ParseRecipeInstructions(payload);

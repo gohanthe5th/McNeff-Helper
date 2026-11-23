@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 internal static class NativeImageFixture
 {
@@ -24,7 +25,7 @@ internal static class NativeImageFixture
             Marshal.WriteInt32(request, 0x18, BitConverter.ToInt32(BitConverter.GetBytes(12.5f), 0));
             Marshal.WriteByte(request, 0x28, 4);
             var function = (MitigateDamage)Marshal.GetDelegateForFunctionPointer(
-                IntPtr.Add(module, 0x16BE7A0), typeof(MitigateDamage));
+                IntPtr.Add(module, 0x16EF320), typeof(MitigateDamage));
             return function(IntPtr.Add(request, 64), request, 12.5f, 0);
         }
         finally
@@ -37,6 +38,16 @@ internal static class NativeImageFixture
     {
         if (args.Length != 1)
             return 1;
+        using (var stream = File.OpenRead(args[0]))
+        using (var hash = SHA256.Create())
+        {
+            string actual = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "");
+            if (actual != "396A866DA447BA6BA15D1C8CB6BABAE329F1EEDCD1A8B6AC430A201BE1C684E7")
+            {
+                Console.Error.WriteLine("The game DLL does not match the verified native fixture.");
+                return 3;
+            }
+        }
         IntPtr module = LoadLibraryEx(Path.GetFullPath(args[0]), IntPtr.Zero, 1);
         if (module == IntPtr.Zero)
         {

@@ -2,12 +2,12 @@ using System;
 
 internal sealed partial class GameTrainer
 {
-    private const int FanTargetScale = 0x018DCB70;
-    private const int FanDeficitCall = 0x018DC761;
-    private const int FanFiringCountCall = 0x018DC7F0;
-    private const int FanPendingLimitCall = 0x018DC96E;
-    private const int ReinforcementFilter = 0x018E08C5;
-    private const int RejectSpawnRow = 0x018E097E;
+    private const int FanTargetScale = 0x0191BBB0;
+    private const int FanDeficitCall = 0x0191B7A1;
+    private const int FanFiringCountCall = 0x0191B830;
+    private const int FanPendingLimitCall = 0x0191B9AE;
+    private const int ReinforcementFilter = 0x0191FBA5;
+    private const int RejectSpawnRow = 0x0191FC7E;
     private static readonly byte[] ReinforcementOriginal = { 0x48, 0x8B, 0x4C, 0x24, 0x48 };
     private Patch[] noFansPatches;
 

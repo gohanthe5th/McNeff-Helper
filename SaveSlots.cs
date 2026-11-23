@@ -45,6 +45,8 @@ internal sealed partial class WalletEditor
         internal string WalletPath;
         internal ulong CreatedTicks;
         internal ulong LastPlayedTicks;
+        internal int StoredNumber;
+        internal int Number;
     }
 
     public SaveSlot[] FindSaveSlots()
@@ -69,26 +71,48 @@ internal sealed partial class WalletEditor
                     Id = id,
                     WalletPath = File.Exists(wallet) ? wallet : null
                 };
-                ReadSessionTimes(folder, id, out file.CreatedTicks, out file.LastPlayedTicks);
+                ReadSessionTimes(folder, id, out file.CreatedTicks, out file.LastPlayedTicks, out file.StoredNumber);
                 existing.Add(file);
             }
         }
 
-        // File numbers use creation order. The game's display order is separate.
+        // Updated manifests keep their own file number. Missing or duplicate
+        // numbers claim the lowest free value in creation order, as in the game.
+        var ordered = existing.OrderBy(file => file.CreatedTicks == 0)
+            .ThenBy(file => file.CreatedTicks)
+            .ThenBy(file => file.Id, StringComparer.Ordinal).ToArray();
+        var claimed = new HashSet<int>();
+        foreach (SessionFile file in ordered)
+            if (file.StoredNumber > 0 && claimed.Add(file.StoredNumber))
+                file.Number = file.StoredNumber;
+        foreach (SessionFile file in ordered)
+        {
+            if (file.Number != 0)
+                continue;
+            int number = 1;
+            while (claimed.Contains(number))
+                number = checked(number + 1);
+            file.Number = number;
+            claimed.Add(number);
+        }
+
         SessionFile latest = existing.Where(file => file.WalletPath != null && file.LastPlayedTicks != 0)
             .OrderByDescending(file => file.LastPlayedTicks)
             .ThenBy(file => file.Id, StringComparer.Ordinal)
             .FirstOrDefault();
-        var slots = existing.OrderBy(file => file.CreatedTicks == 0)
-            .ThenBy(file => file.CreatedTicks)
-            .ThenBy(file => file.Id, StringComparer.Ordinal)
-            .Select((file, index) => new SaveSlot(index + 1, file.WalletPath, true,
+        var slots = ordered.Select(file => new SaveSlot(file.Number, file.WalletPath, true,
                 file.LastPlayedTicks, file == latest))
             .ToList();
         var slotCount = Math.Max(3, slots.Count + 1);
         while (slots.Count < slotCount)
-            slots.Add(new SaveSlot(slots.Count + 1, null, false, 0, false));
-        return slots.ToArray();
+        {
+            int number = 1;
+            while (claimed.Contains(number))
+                number = checked(number + 1);
+            claimed.Add(number);
+            slots.Add(new SaveSlot(number, null, false, 0, false));
+        }
+        return slots.OrderBy(slot => slot.Number).ToArray();
     }
 
     private static bool HasSaveFile(string session)
@@ -175,10 +199,12 @@ internal sealed partial class WalletEditor
         return null;
     }
 
-    private void ReadSessionTimes(string folder, string id, out ulong createdTicks, out ulong lastPlayedTicks)
+    private void ReadSessionTimes(string folder, string id, out ulong createdTicks, out ulong lastPlayedTicks,
+        out int fileNumber)
     {
         createdTicks = 0;
         lastPlayedTicks = 0;
+        fileNumber = 0;
         var path = Path.Combine(folder, "manifest", "manifest.data");
         foreach (var candidate in new[] { path, path + ".bak" })
         {
@@ -190,7 +216,8 @@ internal sealed partial class WalletEditor
                 bool compressed;
                 var payload = BrickPack.Unwrap(save.Payload, out compressed);
                 var array = new BrickPack(payload);
-                if (array.ReadArrayCount() != 7)
+                int fieldCount = array.ReadArrayCount();
+                if (fieldCount != 7 && fieldCount != 8)
                     continue;
                 var position = array.Offset;
                 var sessionId = ReadManifestString(payload, ref position);
@@ -200,10 +227,34 @@ internal sealed partial class WalletEditor
                 var fields = new BrickPack(Slice(payload, position, payload.Length - position));
                 var created = fields.ReadUInt64();
                 var lastPlayed = fields.ReadUInt64();
+                int storedNumber = 0;
+                if (fieldCount == 8)
+                {
+                    position += fields.Offset;
+                    if (position >= payload.Length || (payload[position] != 0xcb && payload[position] != 0xca))
+                        throw new InvalidDataException("The manifest contains an invalid playtime.");
+                    int playtimeWidth = payload[position] == 0xcb ? 9 : 5;
+                    if (playtimeWidth > payload.Length - position)
+                        throw new InvalidDataException("The manifest was truncated.");
+                    position += playtimeWidth;
+                    var tail = new BrickPack(Slice(payload, position, payload.Length - position));
+                    tail.SkipBuildString(); // Game version.
+                    int memberCount = tail.ReadOptionalArrayCount();
+                    for (int member = 0; member < memberCount; member++)
+                    {
+                        if (tail.ReadArrayCount() != 2)
+                            throw new InvalidDataException("The manifest contains an unsupported save member.");
+                        tail.SkipBuildString(); // Type key.
+                        tail.SkipInteger(); // Last-known save sequence.
+                    }
+                    storedNumber = Math.Max(0, tail.ReadInt());
+                    tail.RequireEnd();
+                }
                 if (created <= (ulong)DateTime.MaxValue.Ticks && lastPlayed <= (ulong)DateTime.MaxValue.Ticks)
                 {
                     createdTicks = created;
                     lastPlayedTicks = lastPlayed;
+                    fileNumber = storedNumber;
                     return;
                 }
             }

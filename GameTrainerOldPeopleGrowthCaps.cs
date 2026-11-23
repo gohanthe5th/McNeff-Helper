@@ -2,8 +2,8 @@ using System;
 
 internal sealed partial class GameTrainer
 {
-    private const int OldPeopleGrowthCapSite = 0x018DBFA0;
-    private static readonly byte[] GrowthClockLoad = { 0xF3, 0x0F, 0x10, 0x83, 0xA0, 0x00, 0x00, 0x00 };
+    private const int OldPeopleGrowthCapSite = 0x0191AFE0;
+    private static readonly byte[] GrowthClockLoad = { 0xF3, 0x0F, 0x10, 0x83, 0xA8, 0x00, 0x00, 0x00 };
 
     private Patch[] CreateOldPeopleGrowthCapPatches()
     {

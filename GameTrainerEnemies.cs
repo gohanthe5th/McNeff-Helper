@@ -15,8 +15,8 @@ internal enum EnemySuppression
 
 internal sealed partial class GameTrainer
 {
-    private const int CheckEntitySpawn = 0x01AAB7A9;
-    private const int IsEntitySpawnDisabled = 0x01AABA60;
+    private const int CheckEntitySpawn = 0x01AF9D5F;
+    private const int IsEntitySpawnDisabled = 0x01AFA050;
     private const int EnemyStubSize = 64;
     private static readonly int[] EnemyEntityIds = { 2, 5, 7, 8, 15 };
     private EnemySuppression suppressedEnemies;

@@ -7,8 +7,8 @@ internal sealed partial class GameTrainer
     internal const int MaxOldPeopleMultiplier = 1000;
 
     // Both quota calculations load the pacing group's quota scale before applying game limits.
-    private const int OldPeopleQuotaScale = 0x018DA984;
-    private const int OldPeopleGrowthQuotaScale = 0x018DBF5C;
+    private const int OldPeopleQuotaScale = 0x019199A4;
+    private const int OldPeopleGrowthQuotaScale = 0x0191AF9C;
     private const int OldPeopleStubSize = 64;
     private const int OldPeopleMultiplierOffset = 2 * OldPeopleStubSize;
     private static readonly byte[] LoadQuotaScale = { 0xF3, 0x0F, 0x10, 0x40, 0x20 };

@@ -38,6 +38,10 @@ function StringHash([string]$Path) {
     [Convert]::ToBase64String([IO.File]::ReadAllBytes($Path))
 }
 
+function Read-SaveSchema([string]$Path) {
+    [BitConverter]::ToUInt32([IO.File]::ReadAllBytes($Path), 8)
+}
+
 function Read-SubStatRows($List) {
     $rows = @{}
     foreach ($row in $List.Items) {
@@ -127,6 +131,25 @@ try {
     $progressionPath = Join-Path $target 'progression\progression.data'
     $progressionRecoveryPath = $progressionPath + '.bak'
     [IO.File]::Copy($progressionPath,$progressionRecoveryPath)
+    $primaryProgressionSchema = Read-SaveSchema $progressionPath
+    $recoveryProgressionSchema = Read-SaveSchema $progressionRecoveryPath
+    $sourceInstructions = Read-InstructionFixture $progressionPath
+    $schemaSource = [IO.File]::ReadAllBytes($progressionPath)
+    $crc32 = $editorType.GetMethod('Crc32',$privateStatic)
+    foreach ($schema in @(2, 3)) {
+        $schemaPath = Join-Path $base ('progression-schema-' + $schema + '.data')
+        $schemaBytes = [byte[]]$schemaSource.Clone()
+        [Buffer]::BlockCopy([BitConverter]::GetBytes([uint32]$schema),0,$schemaBytes,8,4)
+        $checksum = [uint32]$crc32.Invoke($null,[object[]]@($schemaBytes,($schemaBytes.Length - 4)))
+        [Buffer]::BlockCopy([BitConverter]::GetBytes($checksum),0,$schemaBytes,$schemaBytes.Length - 4,4)
+        [IO.File]::WriteAllBytes($schemaPath,$schemaBytes)
+        $schemaBefore = StringHash $schemaPath
+        $schemaInstructions = Read-InstructionFixture $schemaPath
+        if (!$schemaInstructions.Ids.SetEquals($sourceInstructions.Ids) -or
+            (Read-SaveSchema $schemaPath) -ne $schema -or (StringHash $schemaPath) -ne $schemaBefore) {
+            throw 'A verified progression schema did not read the same instructions without modifying the fixture.'
+        }
+    }
     # Dry Stone Wall starts unlocked. Castanets is a separate recovery-only
     # record to verify that each copy keeps its own prior instructions.
     Set-InstructionFixture $progressionPath @(265)
@@ -579,6 +602,10 @@ try {
         $allBackups.Count -ne ($beforeAllBackups + 2) -or
         $selectAllButton.Enabled -or $unlockButton.Enabled -or $unlockButton.Text -ne 'Quick Unlock') {
         throw "Full-catalog unlock did not unlock exactly the enabled recipes in both saves. $($note.Text)"
+    }
+    if ((Read-SaveSchema $progressionPath) -ne $primaryProgressionSchema -or
+        (Read-SaveSchema $progressionRecoveryPath) -ne $recoveryProgressionSchema) {
+        throw 'Recipe unlocks changed a primary or recovery progression schema.'
     }
 
     if ((Get-FileHash -LiteralPath $live.Path).Hash -ne $originalWalletHash -or

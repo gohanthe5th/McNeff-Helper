@@ -10,14 +10,14 @@ using System.Security.Cryptography;
 internal sealed partial class GameTrainer : IDisposable
 {
     private const string GameProcess = "WeStealFromOldPeople";
-    private const string SupportedHash = "43705676D1E9D3CA366CB6DA1340355C605D93BAF908280701173D1546958475";
-    private const int PlayerDriverType = 0x05A2C1F8;
-    private const int CanSpendStamina = 0x01BD8670;
-    private const int SpendStamina = 0x01BD83E0;
+    private const string SupportedHash = "396A866DA447BA6BA15D1C8CB6BABAE329F1EEDCD1A8B6AC430A201BE1C684E7";
+    private const int PlayerDriverType = 0x05B5FD78;
+    private const int CanSpendStamina = 0x01C2A230;
+    private const int SpendStamina = 0x01C29FA0;
     private const int StubPageSize = 4096;
 
     // The player-only damage mitigator already has an epilogue for a completely dodged hit.
-    private static readonly Patch HealthPatch = new Patch(0x016BE7B8, new byte[] { 0xEB, 0x03 }, new byte[] { 0xEB, 0x5D });
+    private static readonly Patch HealthPatch = new Patch(0x016EF338, new byte[] { 0xEB, 0x03 }, new byte[] { 0xEB, 0x5D });
 
     private IntPtr process;
     private long moduleBase;
@@ -114,7 +114,7 @@ internal sealed partial class GameTrainer : IDisposable
                 using (FileStream file = File.OpenRead(module.FileName))
                     hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "");
                 if (!string.Equals(hash, SupportedHash, StringComparison.Ordinal))
-                    throw new InvalidOperationException("This trainer supports Steam version 0.1.3, build 26629900.");
+                    throw new InvalidOperationException("This trainer supports Steam version 0.1.4, build 26806474.");
 
                 moduleBase = module.BaseAddress.ToInt64();
                 moduleSize = module.ModuleMemorySize;
@@ -172,12 +172,12 @@ internal sealed partial class GameTrainer : IDisposable
             // Their normal destinations and calling conventions are unchanged for non-player entities.
             return new[]
             {
-                StaminaPatch(0x01BD8584, 0xE8, CanSpendStamina, readiness),
-                StaminaPatch(0x01BDEE55, 0xE8, CanSpendStamina, readiness),
-                StaminaPatch(0x01BD9E5B, 0xE9, CanSpendStamina, readiness),
-                StaminaPatch(0x01BD827C, 0xE8, SpendStamina, spending),
-                StaminaPatch(0x01BD89F4, 0xE8, SpendStamina, spending),
-                StaminaPatch(0x01BDEFAD, 0xE8, SpendStamina, spending)
+                StaminaPatch(0x01C2A144, 0xE8, CanSpendStamina, readiness),
+                StaminaPatch(0x01C311D3, 0xE8, CanSpendStamina, readiness),
+                StaminaPatch(0x01C2BC5B, 0xE9, CanSpendStamina, readiness),
+                StaminaPatch(0x01C29E3C, 0xE8, SpendStamina, spending),
+                StaminaPatch(0x01C2A5B4, 0xE8, SpendStamina, spending),
+                StaminaPatch(0x01C3132B, 0xE8, SpendStamina, spending)
             };
         }
         catch

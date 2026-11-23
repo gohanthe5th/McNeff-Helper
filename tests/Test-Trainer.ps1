@@ -1,7 +1,9 @@
 ﻿param([string]$Executable,[string]$Fixture,[string]$EnemyTypesRenderPath)
 
 $ErrorActionPreference = 'Stop'
-$dll = 'C:\Program Files (x86)\Steam\steamapps\common\We Steal From Old People The Game\data_WeStealFromOldPeople_windows_x86_64\WeStealFromOldPeople.dll'
+$assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($Executable))
+$dll = $assembly.GetType('WalletEditor', $true).GetMethod('FindGameDll').Invoke($null, @())
+if (!$dll) { throw 'The installed game DLL could not be located.' }
 if (Get-Process -Name WeStealFromOldPeople -ErrorAction SilentlyContinue) {
     throw 'A game process is already running. The test fixture did not start.'
 }
@@ -35,15 +37,14 @@ try {
         throw 'The fixture must be the only WeStealFromOldPeople process.'
     }
 
-    $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($Executable))
     $type = $assembly.GetType('GameTrainer', $true)
     $trainer = [Activator]::CreateInstance($type)
-    $health = '16BE7B8 2'
-    $stamina = @('1BD8584 5', '1BDEE55 5', '1BD9E5B 5', '1BD827C 5', '1BD89F4 5', '1BDEFAD 5')
-    $spawnSites = @('18DA984 5','18DBF5C 5')
-    $capSites = @('18DBFA0 8','18E31C7 6','18D5386 5','18DDE8A 3')
-    $fanSites = @('18DC761 5','18DC7F0 5','18DC96E 5','18E08C5 5')
-    $enemyFilter = '1AAB7A9 5'
+    $health = '16EF338 2'
+    $stamina = @('1C2A144 5', '1C311D3 5', '1C2BC5B 5', '1C29E3C 5', '1C2A5B4 5', '1C3132B 5')
+    $spawnSites = @('19199A4 5','191AF9C 5')
+    $capSites = @('191AFE0 8','19224A7 6','1914246 5','191CECA 3')
+    $fanSites = @('191B7A1 5','191B830 5','191B9AE 5','191FBA5 5')
+    $enemyFilter = '1AF9D5F 5'
     $patchSites = @($health) + $stamina + $spawnSites + $capSites + $fanSites + @($enemyFilter)
     $original = @{}
     foreach ($site in $patchSites) { $original[$site] = Read-Image $site }
@@ -118,7 +119,7 @@ try {
         $patchedFans[$site] = $actual
     }
     $fansOnly = Read-Image $enemyFilter
-    if ($original[$enemyFilter] -ne 'E8-B2-02-00-00' -or $fansOnly -eq $original[$enemyFilter] -or
+    if ($original[$enemyFilter] -ne 'E8-EC-02-00-00' -or $fansOnly -eq $original[$enemyFilter] -or
         $fansOnly -notlike 'E8-*') {
         throw 'No fans did not enable the shared hostile spawn filter.'
     }

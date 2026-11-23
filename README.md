@@ -4,7 +4,9 @@ A Windows companion for **We Steal From Old People: The Game**, with save editor
 
 **[Download McNeff Helper.exe](https://github.com/gohanthe5th/McNeff-Helper/raw/refs/heads/main/download/McNeff%20Helper.exe)**
 
-Requires 64-bit Windows, .NET Framework 4.8, and the supported Steam game version **0.1.3, build 26629900**.
+Requires 64-bit Windows, .NET Framework 4.8, and the supported Steam game version **0.1.4, build 26806474**.
+
+The updated release supports the game's stored save-file numbers and progression schema 3, and remaps all live controls for this build. Existing save layouts remain readable. The catalog now uses the game's **Stamina Recovery** label.
 
 ## Using the app
 

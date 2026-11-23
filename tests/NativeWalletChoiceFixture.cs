@@ -71,7 +71,7 @@ internal static class NativeWalletChoiceFixture
         using (var hash = SHA256.Create())
         {
             string actual = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "");
-            if (actual != "43705676D1E9D3CA366CB6DA1340355C605D93BAF908280701173D1546958475")
+            if (actual != "396A866DA447BA6BA15D1C8CB6BABAE329F1EEDCD1A8B6AC430A201BE1C684E7")
             {
                 Console.Error.WriteLine("The game DLL does not match the verified native fixture.");
                 return 2;
@@ -94,7 +94,7 @@ internal static class NativeWalletChoiceFixture
                     entries.Add(new Entry(name));
             }
             var compare = (Compare)Marshal.GetDelegateForFunctionPointer(
-                IntPtr.Add(module, 0x1E221D0), typeof(Compare));
+                IntPtr.Add(module, 0x1E8FDB0), typeof(Compare));
             entries.Sort((left, right) => compare(left.Asset, right.Asset));
             foreach (Entry entry in entries)
                 Console.WriteLine(entry.Name);

@@ -2,10 +2,10 @@ using System;
 
 internal sealed partial class GameTrainer
 {
-    private const int OldPeopleAdmissionCap = 0x018E31C7;
-    private const int AdmissionApproved = 0x018E3213;
-    private const int OldPeopleCapAccounting = 0x018D5386;
-    private const int OldPeoplePresenceBudget = 0x018DDE8A;
+    private const int OldPeopleAdmissionCap = 0x019224A7;
+    private const int AdmissionApproved = 0x019224F3;
+    private const int OldPeopleCapAccounting = 0x01914246;
+    private const int OldPeoplePresenceBudget = 0x0191CECA;
     private const int WorldCapStubSize = 128;
     private static readonly byte[] AdmissionCapOriginal = { 0x80, 0x7B, 0x48, 0x00, 0x75, 0x46 };
     private static readonly byte[] CapAccountingOriginal = { 0x41, 0x0F, 0xB6, 0x50, 0x48 };

@@ -252,7 +252,7 @@ internal sealed partial class WalletEditor
         }
 
         BrickPack.WriteUInt(stream, ComputeBuildSeed(placements));
-        // Native versions for the unmodded Steam recipe library in v0.1.3.
+        // Native versions for both verified unmodded Steam recipe libraries.
         stream.WriteByte(1);
         stream.WriteByte(2);
         stream.WriteByte(2);
